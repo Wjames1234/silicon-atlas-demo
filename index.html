@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>SILICON ATLAS · 全流程洁净室数字孪生</title>
+<style>
+  :root {
+    --bg: #f4f6f8;
+    --panel: #ffffff;
+    --accent: #0d9488;
+    --text: #1f2937;
+    --muted: #6b7280;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    overflow: hidden;
+  }
+  #header {
+    height: 56px;
+    background: #fff;
+    border-bottom: 1px solid #e5e7eb;
+    display: flex;
+    align-items: center;
+    padding: 0 24px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+  #header .logo { color: var(--accent); margin-right: 12px; }
+  #layout {
+    display: flex;
+    height: calc(100vh - 56px);
+  }
+  #sidebar {
+    width: 260px;
+    background: var(--panel);
+    border-right: 1px solid #e5e7eb;
+    overflow-y: auto;
+    padding: 16px 12px;
+  }
+  #sidebar h3 {
+    margin: 0 0 12px 8px;
+    font-size: 13px;
+    color: var(--muted);
+    letter-spacing: 1px;
+  }
+  .process-item {
+    display: flex;
+    align-items: center;
+    padding: 10px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    margin-bottom: 4px;
+    transition: background 0.2s;
+  }
+  .process-item:hover { background: #f0fdfa; }
+  .process-item.active {
+    background: #ccfbf1;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .process-item .num {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: #e5e7eb;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    margin-right: 10px;
+    flex-shrink: 0;
+  }
+  .process-item.active .num { background: var(--accent); color: white; }
+  #canvas-wrap {
+    flex: 1;
+    position: relative;
+  }
+  #canvas-wrap canvas { display: block; }
+  #detail-panel {
+    width: 320px;
+    background: var(--panel);
+    border-left: 1px solid #e5e7eb;
+    padding: 20px;
+    overflow-y: auto;
+  }
+  #detail-panel h2 { margin: 0 0 8px; font-size: 20px; }
+  #detail-panel .sub { color: var(--muted); font-size: 13px; margin-bottom: 16px; }
+  .metric {
+    background: #f9fafb;
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 12px;
+  }
+  .metric .value { font-size: 28px; font-weight: 700; color: var(--accent); }
+  .metric .label { font-size: 12px; color: var(--muted); }
+  #reset-btn {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: white;
+    border: 1px solid #d1d5db;
+    padding: 8px 16px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 13px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  }
+  #reset-btn:hover { background: #f9fafb; }
+  .label {
+    background: white;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    white-space: nowrap;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <span class="logo">●</span>
+  SILICON ATLAS · LINE A · LIVE &nbsp;&nbsp;|&nbsp;&nbsp; BAY A-01 / 1:1 SCALE
+</div>
+
+<div id="layout">
+  <div id="sidebar">
+    <h3>PROCESS ROUTE · 10 STEPS</h3>
+    <div id="process-list"></div>
+  </div>
+
+  <div id="canvas-wrap">
+    <button id="reset-btn">返回整体视图</button>
+  </div>
+
+  <div id="detail-panel">
+    <h2 id="detail-title">全流程洁净室</h2>
+    <div class="sub" id="detail-sub">24 × 22 m 洁净室 bay · FFU 天花 · 7 m 净高 · 1:1 尺度</div>
+    <div id="detail-content">
+      <p>点击左侧工序或中间设备，聚焦查看该工序内部。</p>
+      <div class="metric">
+        <div class="value">158 eph</div>
+        <div class="label">产能 / THROUGHPUT</div>
+      </div>
+      <div class="metric">
+        <div class="value">98.5 %</div>
+        <div class="label">综合良率</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/renderers/CSS2DRenderer.js"></script>
+
+<script>
+const processes = [
+  { id: 1, name: "晶圆清洗", en: "CLEAN", color: 0x14b8a6, desc: "去除颗粒、金属离子与有机残留，为后续工艺建立洁净界面。" },
+  { id: 2, name: "热氧化", en: "OXIDE", color: 0xf59e0b, desc: "在硅片表面生长高质量二氧化硅层。" },
+  { id: 3, name: "光刻", en: "LITH", color: 0x3b82f6, desc: "将电路图形转移到光刻胶上。" },
+  { id: 4, name: "等离子刻蚀", en: "ETCH", color: 0x8b5cf6, desc: "选择性去除材料，形成图形。" },
+  { id: 5, name: "离子注入", en: "IMPLANT", color: 0xec4899, desc: "将掺杂原子注入硅片。" },
+  { id: 6, name: "薄膜沉积", en: "DEPOSITION", color: 0x10b981, desc: "沉积绝缘层或导电薄膜。" },
+  { id: 7, name: "化学机械抛光", en: "CMP", color: 0x6366f1, desc: "平坦化晶圆表面。" },
+  { id: 8, name: "金属化", en: "METAL", color: 0xef4444, desc: "形成金属互连层。" },
+  { id: 9, name: "量测与检测", en: "METROLOGY", color: 0x0ea5e9, desc: "关键尺寸与缺陷检测。" },
+  { id: 10, name: "切割与封装测试", en: "PACKAGE", color: 0x64748b, desc: "划片、封装与最终测试。" }
+];
+
+// UI list
+const listEl = document.getElementById('process-list');
+processes.forEach(p => {
+  const div = document.createElement('div');
+  div.className = 'process-item';
+  div.innerHTML = `<div class="num">${String(p.id).padStart(2,'0')}</div><div>${p.name}<br><small style="color:#6b7280">${p.en}</small></div>`;
+  div.onclick = () => focusProcess(p.id);
+  listEl.appendChild(div);
+});
+
+// Three.js setup
+const container = document.getElementById('canvas-wrap');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xf0f4f8);
+scene.fog = new THREE.Fog(0xf0f4f8, 40, 120);
+
+const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 200);
+const overviewPos = new THREE.Vector3(18, 22, 28);
+const overviewTarget = new THREE.Vector3(0, 2, 0);
+camera.position.copy(overviewPos);
+camera.lookAt(overviewTarget);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(container.clientWidth, container.clientHeight);
+renderer.shadowMap.enabled = true;
+container.insertBefore(renderer.domElement, container.firstChild);
+
+const labelRenderer = new THREE.CSS2DRenderer();
+labelRenderer.setSize(container.clientWidth, container.clientHeight);
+labelRenderer.domElement.style.position = 'absolute';
+labelRenderer.domElement.style.top = '0';
+labelRenderer.domElement.style.pointerEvents = 'none';
+container.appendChild(labelRenderer.domElement);
+
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.target.copy(overviewTarget);
+
+// Lights
+scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+dirLight.position.set(20, 30, 10);
+dirLight.castShadow = true;
+scene.add(dirLight);
+
+// Floor
+const floor = new THREE.Mesh(
+  new THREE.PlaneGeometry(40, 18),
+  new THREE.MeshStandardMaterial({ color: 0xe5e7eb })
+);
+floor.rotation.x = -Math.PI / 2;
+floor.receiveShadow = true;
+scene.add(floor);
+
+// Platform
+const platform = new THREE.Mesh(
+  new THREE.BoxGeometry(36, 0.4, 10),
+  new THREE.MeshStandardMaterial({ color: 0xd1d5db })
+);
+platform.position.y = 0.2;
+platform.receiveShadow = true;
+scene.add(platform);
+
+// Stations
+const stationGroups = [];
+const stationMeshes = [];
+
+processes.forEach((p, i) => {
+  const group = new THREE.Group();
+  const x = (i - 4.5) * 3.4;
+  group.position.set(x, 0.4, 0);
+
+  // Main body
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(2.2, 1.8, 2.2),
+    new THREE.MeshStandardMaterial({ color: p.color, roughness: 0.4 })
+  );
+  body.position.y = 0.9;
+  body.castShadow = true;
+  body.userData.processId = p.id;
+  group.add(body);
+  stationMeshes.push(body);
+
+  // Top yellow box
+  const top = new THREE.Mesh(
+    new THREE.BoxGeometry(1.4, 0.6, 1.4),
+    new THREE.MeshStandardMaterial({ color: 0xfbbf24 })
+  );
+  top.position.y = 2.1;
+  top.castShadow = true;
+  group.add(top);
+
+  // Label
+  const labelDiv = document.createElement('div');
+  labelDiv.className = 'label';
+  labelDiv.textContent = `${String(p.id).padStart(2,'0')} ${p.en}`;
+  const label = new THREE.CSS2DObject(labelDiv);
+  label.position.set(0, 2.8, 0);
+  group.add(label);
+
+  scene.add(group);
+  stationGroups.push(group);
+});
+
+// Walls (simple)
+const wallMat = new THREE.MeshStandardMaterial({ color: 0xf3f4f6, side: THREE.DoubleSide });
+const backWall = new THREE.Mesh(new THREE.PlaneGeometry(40, 12), wallMat);
+backWall.position.set(0, 6, -6);
+scene.add(backWall);
+
+// Raycaster for clicks
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+
+function onMouseClick(event) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  const intersects = raycaster.intersectObjects(stationMeshes);
+  if (intersects.length > 0) {
+    focusProcess(intersects[0].object.userData.processId);
+  }
+}
+renderer.domElement.addEventListener('click', onMouseClick);
+
+// Camera animation
+let animating = false;
+let animStart = null;
+let animFrom = null;
+let animTo = null;
+let targetFrom = null;
+let targetTo = null;
+
+function focusProcess(id) {
+  const p = processes.find(x => x.id === id);
+  if (!p) return;
+
+  // Update UI
+  document.querySelectorAll('.process-item').forEach((el, i) => {
+    el.classList.toggle('active', i === id - 1);
+  });
+  document.getElementById('detail-title').textContent = p.name;
+  document.getElementById('detail-sub').textContent = `${p.en} · BAY 01 / FEOL`;
+  document.getElementById('detail-content').innerHTML = `
+    <p>${p.desc}</p>
+    <div class="metric"><div class="value">${150 + id * 10} eph</div><div class="label">产能</div></div>
+    <div class="metric"><div class="value">${(98 + Math.random()).toFixed(1)} %</div><div class="label">良率</div></div>
+  `;
+
+  // Focus camera
+  const station = stationGroups[id - 1];
+  const focusPos = station.position.clone().add(new THREE.Vector3(4, 5, 6));
+  const focusTarget = station.position.clone().add(new THREE.Vector3(0, 1.2, 0));
+
+  startCameraAnim(focusPos, focusTarget);
+}
+
+function resetOverview() {
+  document.querySelectorAll('.process-item').forEach(el => el.classList.remove('active'));
+  document.getElementById('detail-title').textContent = '全流程洁净室';
+  document.getElementById('detail-sub').textContent = '24 × 22 m 洁净室 bay · FFU 天花 · 7 m 净高 · 1:1 尺度';
+  document.getElementById('detail-content').innerHTML = '<p>点击左侧工序或中间设备，聚焦查看该工序内部。</p>';
+  startCameraAnim(overviewPos.clone(), overviewTarget.clone());
+}
+
+document.getElementById('reset-btn').onclick = resetOverview;
+
+function startCameraAnim(toPos, toTarget) {
+  animFrom = camera.position.clone();
+  animTo = toPos;
+  targetFrom = controls.target.clone();
+  targetTo = toTarget;
+  animStart = performance.now();
+  animating = true;
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  if (animating) {
+    const t = Math.min(1, (performance.now() - animStart) / 900);
+    const ease = t < 0.5 ? 2*t*t : -1 + (4 - 2*t)*t; // easeInOut
+    camera.position.lerpVectors(animFrom, animTo, ease);
+    controls.target.lerpVectors(targetFrom, targetTo, ease);
+    if (t >= 1) animating = false;
+  }
+
+  controls.update();
+  renderer.render(scene, camera);
+  labelRenderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener('resize', () => {
+  camera.aspect = container.clientWidth / container.clientHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(container.clientWidth, container.clientHeight);
+  labelRenderer.setSize(container.clientWidth, container.clientHeight);
+});
+</script>
+</body>
+</html>
